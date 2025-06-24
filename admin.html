@@ -14,6 +14,7 @@
         .accordion-content { display: none; padding: 15px; border: 1px solid #ddd; border-top: none; }
         table { width: 100%; border-collapse: collapse; }
         th, td { text-align: right; padding: 8px; border-bottom: 1px solid #eee; }
+        #admin-status { word-break: break-all; } /* To prevent long error messages from overflowing */
     </style>
 </head>
 <body>
@@ -53,28 +54,40 @@
         // --- LOGIN LOGIC ---
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            adminStatus.textContent = 'جاري التحقق...';
             const password = document.getElementById('password').value;
-            if (password !== ADMIN_PASSWORD) {
-                adminStatus.textContent = 'كلمة المرور غير صحيحة.';
-                return;
-            }
+
             try {
                 const response = await fetch('/api/get-submissions', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ password })
                 });
-                if (!response.ok) throw new Error('فشل الوصول للبيانات');
-                allSubmissions = await response.json();
+
+                // نقوم بقراءة الرد من الخادم سواء كان ناجحًا أو فاشلاً
+                const responseData = await response.json();
+
+                // إذا كان الرد غير ناجح (مثل خطأ 500)
+                if (!response.ok) {
+                    // نعرض تفاصيل الخطأ التي أرسلها الخادم
+                    const detailedError = responseData.error_details || JSON.stringify(responseData);
+                    throw new Error(detailedError);
+                }
+
+                // إذا نجح كل شيء، يتم عرض البيانات
+                allSubmissions = responseData;
                 loginSection.style.display = 'none';
                 dashboardSection.style.display = 'block';
                 initializeDashboard();
+
             } catch (error) {
-                adminStatus.textContent = error.message;
+                // هنا سيتم عرض رسالة الخطأ التفصيلية الحقيقية
+                adminStatus.textContent = `فشل الخادم: ${error.message}`;
+                console.error('Login Error:', error);
             }
         });
 
-        // --- DASHBOARD LOGIC ---
+        // --- DASHBOARD LOGIC (No changes here) ---
         function initializeDashboard() {
             const years = [...new Set(allSubmissions.flatMap(s => s.dates.map(d => new Date(d).getFullYear())))];
             years.sort((a,b) => b-a).forEach(y => yearFilter.innerHTML += `<option value="${y}">${y}</option>`);
@@ -106,7 +119,6 @@
 
             const byPreacher = filtered.reduce((acc, sub) => {
                 acc[sub.preacher] = acc[sub.preacher] || [];
-                // Filter dates to only show those in the selected month
                 const datesInMonth = sub.dates.filter(d => new Date(d).getFullYear() === year && new Date(d).getMonth() === month);
                 if(datesInMonth.length > 0) {
                      acc[sub.preacher].push({ ...sub, dates: datesInMonth });
