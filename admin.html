@@ -3,99 +3,147 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>لوحة التحكم - عرض الطلبات</title>
+    <title>لوحة التحكم</title>
     <style>
         body { font-family: Arial, sans-serif; background-color: #f4f4f4; color: #333; padding: 20px; }
-        #login-section, #results-section { max-width: 800px; margin: 40px auto; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        #login-section, #dashboard-section { max-width: 900px; margin: 40px auto; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
         h1, h2 { text-align: center; }
-        input[type="password"], button { width: 100%; padding: 10px; margin-top: 10px; border-radius: 5px; border: 1px solid #ddd; box-sizing: border-box; }
-        button { background-color: #28a745; color: white; cursor: pointer; }
-        #admin-status { text-align: center; color: red; font-weight: bold; }
-        .submission { border: 1px solid #eee; padding: 15px; margin-bottom: 15px; border-radius: 5px; background: #fdfdfd; }
-        .submission p { margin: 5px 0; }
-        .submission strong { color: #0056b3; }
+        .controls { display: flex; gap: 15px; justify-content: center; margin-bottom: 20px; }
+        select, button { padding: 10px; border-radius: 5px; border: 1px solid #ddd; }
+        .accordion-header { background: #007bff; color: white; padding: 15px; cursor: pointer; border-radius: 5px; margin-top: 10px; }
+        .accordion-content { display: none; padding: 15px; border: 1px solid #ddd; border-top: none; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: right; padding: 8px; border-bottom: 1px solid #eee; }
     </style>
 </head>
 <body>
     <div id="login-section">
         <h1>دخول لوحة التحكم</h1>
-        <form id="login-form">
-            <input type="password" id="password" placeholder="أدخل كلمة المرور" required>
+        <form id="login-form" style="text-align:center;">
+            <input type="password" id="password" placeholder="أدخل كلمة المرور" required style="width: 50%; padding: 10px;">
             <button type="submit">دخول</button>
-            <p id="admin-status"></p>
+            <p id="admin-status" style="color:red; font-weight:bold;"></p>
         </form>
     </div>
 
-    <div id="results-section" style="display:none;">
-        <h1>جميع الطلبات المسجلة</h1>
-        <div id="results-container">
-            <p>يتم التحميل...</p>
+    <div id="dashboard-section" style="display:none;">
+        <h1>عرض التسجيلات</h1>
+        <div class="controls">
+            <select id="year-filter"></select>
+            <select id="month-filter"></select>
         </div>
+        <div id="dashboard-content"></div>
     </div>
 
     <script>
-        const loginForm = document.getElementById('login-form');
-        const passwordInput = document.getElementById('password');
-        const adminStatus = document.getElementById('admin-status');
-        const loginSection = document.getElementById('login-section');
-        const resultsSection = document.getElementById('results-section');
-        const resultsContainer = document.getElementById('results-container');
-        
-        // !! غير كلمة المرور هذه إلى كلمة مرور سرية خاصة بك !!
-        const ADMIN_PASSWORD = "Aa112233@"; 
+        // --- CONFIG ---
+        const ADMIN_PASSWORD = "Aa112233";
 
+        // --- ELEMENTS ---
+        const loginForm = document.getElementById('login-form');
+        const loginSection = document.getElementById('login-section');
+        const dashboardSection = document.getElementById('dashboard-section');
+        const adminStatus = document.getElementById('admin-status');
+        const yearFilter = document.getElementById('year-filter');
+        const monthFilter = document.getElementById('month-filter');
+        const dashboardContent = document.getElementById('dashboard-content');
+        let allSubmissions = [];
+        const monthNames = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+
+        // --- LOGIN LOGIC ---
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const enteredPassword = passwordInput.value;
-
-            // Simple check first
-            if (enteredPassword !== ADMIN_PASSWORD) {
+            const password = document.getElementById('password').value;
+            if (password !== ADMIN_PASSWORD) {
                 adminStatus.textContent = 'كلمة المرور غير صحيحة.';
                 return;
             }
-            
-            adminStatus.textContent = 'جاري التحقق وجلب البيانات...';
-            
             try {
                 const response = await fetch('/api/get-submissions', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ password: enteredPassword })
+                    body: JSON.stringify({ password })
                 });
-
-                if (!response.ok) {
-                    throw new Error('فشل الوصول للبيانات. تأكد من صحة كلمة المرور.');
-                }
-
-                const submissions = await response.json();
+                if (!response.ok) throw new Error('فشل الوصول للبيانات');
+                allSubmissions = await response.json();
                 loginSection.style.display = 'none';
-                resultsSection.style.display = 'block';
-                displaySubmissions(submissions);
-
+                dashboardSection.style.display = 'block';
+                initializeDashboard();
             } catch (error) {
                 adminStatus.textContent = error.message;
             }
         });
 
-        function displaySubmissions(submissions) {
-            resultsContainer.innerHTML = ''; // Clear loading message
-            if (submissions.length === 0) {
-                resultsContainer.innerHTML = '<p>لا توجد أي طلبات مسجلة حتى الآن.</p>';
+        // --- DASHBOARD LOGIC ---
+        function initializeDashboard() {
+            const years = [...new Set(allSubmissions.flatMap(s => s.dates.map(d => new Date(d).getFullYear())))];
+            years.sort((a,b) => b-a).forEach(y => yearFilter.innerHTML += `<option value="${y}">${y}</option>`);
+            
+            monthNames.forEach((m, i) => monthFilter.innerHTML += `<option value="${i}">${m}</option>`);
+            
+            const now = new Date();
+            yearFilter.value = now.getFullYear();
+            monthFilter.value = now.getMonth();
+            
+            yearFilter.addEventListener('change', render);
+            monthFilter.addEventListener('change', render);
+            render();
+        }
+
+        function render() {
+            dashboardContent.innerHTML = '';
+            const year = parseInt(yearFilter.value);
+            const month = parseInt(monthFilter.value);
+
+            const filtered = allSubmissions.filter(sub => 
+                sub.dates.some(d => new Date(d).getFullYear() === year && new Date(d).getMonth() === month)
+            );
+            
+            if(filtered.length === 0) {
+                dashboardContent.innerHTML = '<p style="text-align:center;">لا توجد تسجيلات لهذا الشهر.</p>';
                 return;
             }
 
-            submissions.forEach(sub => {
-                const submissionDiv = document.createElement('div');
-                submissionDiv.className = 'submission';
-                const dates = sub.fridays.join(', ') || 'لا يوجد';
-                submissionDiv.innerHTML = `
-                    <p><strong>الخطيب:</strong> ${sub.preacher}</p>
-                    <p><strong>الجامع:</strong> ${sub.mosque}</p>
-                    <p><strong>تواريخ الجمعات:</strong> ${dates}</p>
-                    <p><small>تاريخ التسجيل: ${new Date(sub.submissionDate).toLocaleString('ar-SA')}</small></p>
-                `;
-                resultsContainer.appendChild(submissionDiv);
-            });
+            const byPreacher = filtered.reduce((acc, sub) => {
+                acc[sub.preacher] = acc[sub.preacher] || [];
+                // Filter dates to only show those in the selected month
+                const datesInMonth = sub.dates.filter(d => new Date(d).getFullYear() === year && new Date(d).getMonth() === month);
+                if(datesInMonth.length > 0) {
+                     acc[sub.preacher].push({ ...sub, dates: datesInMonth });
+                }
+                return acc;
+            }, {});
+
+            for (const preacher in byPreacher) {
+                const header = document.createElement('div');
+                header.className = 'accordion-header';
+                header.textContent = preacher;
+                
+                const content = document.createElement('div');
+                content.className = 'accordion-content';
+                
+                const table = document.createElement('table');
+                table.innerHTML = `<thead><tr><th>الجامع/المصلى</th><th>نوع الخطبة</th><th>الأيام</th></tr></thead>`;
+                const tbody = document.createElement('tbody');
+                
+                byPreacher[preacher].forEach(assignment => {
+                    const row = tbody.insertRow();
+                    row.innerHTML = `
+                        <td>${assignment.mosque}</td>
+                        <td>${assignment.type}</td>
+                        <td>${assignment.dates.map(d => new Date(d).getDate()).join(', ')}</td>
+                    `;
+                });
+
+                table.appendChild(tbody);
+                content.appendChild(table);
+                dashboardContent.appendChild(header);
+                dashboardContent.appendChild(content);
+                
+                header.addEventListener('click', () => {
+                    content.style.display = content.style.display === 'block' ? 'none' : 'block';
+                });
+            }
         }
     </script>
 </body>
