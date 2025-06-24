@@ -26,15 +26,14 @@ module.exports = async (req, res) => {
         res.status(200).json(submissions);
 
     } catch (error) {
-        // --- هذا هو التعديل الهام ---
-        // سيقوم هذا الكود بإرسال تفاصيل الخطأ الحقيقية إلى المتصفح
-        console.error("A detailed error occurred:", error); // سيسجل الخطأ في Vercel
+        // --- هذا هو الجزء الهام الذي يجب أن يعمل ---
+        console.error("A detailed error occurred:", error);
         res.status(500).json({
             message: "An internal server error occurred.",
             error_details: error.toString(), // رسالة الخطأ
-            error_stack: error.stack // تفاصيل إضافية عن مكان الخطأ
+            error_stack: error.stack 
         });
-        // -----------------------------
+        // ------------------------------------------
     } finally {
         if(client) await client.close();
     }
